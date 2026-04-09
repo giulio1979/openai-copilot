@@ -1,0 +1,14 @@
+{
+  "name": "openai-copilot-proxy",
+  "version": "1.0.0",
+  "description": "OpenAI-compatible API server that proxies to GitHub Copilot",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@copilot-extensions/preview-sdk": "^5.0.1",
+    "express": "^4.21.0"
+  }
+}
