@@ -8,6 +8,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "gpt-4.1";
 const GITHUB_MODELS_URL = "https://models.inference.ai.azure.com/chat/completions";
 const MAX_RETRIES = 5;
+const UPSTREAM_TIMEOUT_MS = 120_000; // 2 min timeout per upstream request
 
 if (!GITHUB_TOKEN) {
   console.error("GITHUB_TOKEN environment variable is required");
@@ -17,7 +18,20 @@ if (!GITHUB_TOKEN) {
 
 async function fetchWithRetry(url, options) {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(url, options);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+    let res;
+    try {
+      res = await fetch(url, { ...options, signal: controller.signal });
+    } catch (err) {
+      clearTimeout(timer);
+      if (err.name === "AbortError") {
+        throw new Error(`Upstream request timed out after ${UPSTREAM_TIMEOUT_MS / 1000}s`);
+      }
+      throw err;
+    }
+    clearTimeout(timer);
+
     if (res.status !== 429 || attempt === MAX_RETRIES) return res;
 
     // Parse wait time from response, default 20s
@@ -32,6 +46,14 @@ async function fetchWithRetry(url, options) {
     await new Promise((r) => setTimeout(r, waitMs));
   }
 }
+
+// ---------- Request logging ----------
+
+app.use((req, _res, next) => {
+  const ts = new Date().toISOString();
+  console.log(`[${ts}] ${req.method} ${req.url}`);
+  next();
+});
 
 // ---------- OpenAI-compatible: POST /v1/chat/completions ----------
 
