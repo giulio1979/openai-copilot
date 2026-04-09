@@ -36,11 +36,22 @@ async function fetchWithRetry(url, options) {
 
     // Parse wait time from response, default 20s
     let waitSec = 20;
+    let rawBody;
     try {
-      const body = await res.json();
-      const match = body?.error?.message?.match(/wait (\d+) seconds/i);
+      rawBody = await res.json();
+      const match = rawBody?.error?.message?.match(/wait (\d+) seconds/i);
       if (match) waitSec = parseInt(match[1], 10);
     } catch {}
+
+    // If wait is too long (daily limit), don't retry — return the 429 to the client
+    if (waitSec > 120) {
+      console.log(`Rate limit wait too long (${waitSec}s), returning 429 to client`);
+      return new Response(JSON.stringify(rawBody || { error: { message: "Rate limited" } }), {
+        status: 429,
+        headers: { "Content-Type": "application/json", "Retry-After": String(waitSec) },
+      });
+    }
+
     const waitMs = (waitSec + 1) * 1000;
     console.log(`Rate limited, retrying in ${waitSec + 1}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
     await new Promise((r) => setTimeout(r, waitMs));
